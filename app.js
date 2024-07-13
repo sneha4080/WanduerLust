@@ -121,7 +121,14 @@ app.get("/", (req, res) => {
       res.send("Hi, i am root")
 }
 )
+// Middleware to set flash messages
+app.use((req, res, next) => {
+      res.locals.success = req.flash("success");
+      res.locals.error = req.flash("error");
+      next();
+});
 
+  
 
 
 // app.get("/testListing",async(req,res)=>{
