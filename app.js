@@ -1,135 +1,123 @@
-const express = require('express'); // Correct, for example
+const express = require("express");
 const app = express();
 const mongoose = require("mongoose");
-const Listing = require("./models/Listing.js");//listing file ne require kari
 const path = require("path");
 const methodOverride = require("method-override");
-const ejsMate = require('ejs-mate');
-const wrapAsync = require("./utils/wrapAsync.js") //use create route 
+const ejsMate = require("ejs-mate");
 const ExpressError = require("./utils/ExpressError.js");
 
 
-const listings = require("./routes/listing.js")
+const session = require("express-session");
+const flash = require("connect-flash");
+const passport = require("passport");
+const LocalStrategy = require("passport-local");
+const User = require("./models/user.js");
 
-const { wrap } = require('module');
-const { error } = require('console');
-const { listingSchema, reviewSchema } = require("./schema.js");
-console.log(listingSchema); // This should log the schema definition
+const listingsRouter = require("./routes/listing.js");
+const reviewsrouter = require("./routes/review.js");
+const userRouter = require("./routes/user.js");
 
-const Review = require("./models/review.js");
+const wrapAsync = require("./utils/wrapAsync.js");
+const Listing = require("./models/Listing.js");
 
-app.use(express.json());
+const MONGO_URL = "mongodb://127.0.0.1:27017/Wanderlust";
 
-// Use the review routes
+main()
+  .then(() => {
+    console.log("connected to DB");
+  })
+  .catch((err) => {
+    console.log(err);
+  });
 
-app.set("view engine", "ejs")
+async function main() {
+  await mongoose.connect(MONGO_URL);
+}
+
+app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 app.use(express.urlencoded({ extended: true }));
 app.use(methodOverride("_method"));
 app.engine('ejs', ejsMate);
 app.use(express.static(path.join(__dirname, "/public")));
 
+app.get("/", (req, res) => {
+  res.send("Hi, I am root");
+});
 
 
-const MONGO_URl = "mongodb://127.0.0.1:27017/Wanderlust";
-
-async function main() {
-      try {
-            await mongoose.connect(MONGO_URl);
-            console.log("Connected to MongoDB.");
-      } catch (err) {
-            console.error("Failed to connect to MongoDB:", err);
-      }
-}
-main()
 
 
+
+
+const sessionOptions = {
+      secret: "mysupercode",
+      resave: false,
+      saveUninitialized: true,
+      Cookie: {
+            expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+            httpOnly: true
+      },
+};
+app.use(passport.initialize());
+app.use(session(sessionOptions))//user aek web na page & diffrent tab ma access kare password use kare nt need to login
+app.use(flash());
+
+// app.use(passport.initialize);
+app.use(passport.session());
+passport.use(new LocalStrategy(User.authenticate()));
+// passport na ander badha user localstrategy thi authenticate hova joi 
+
+passport.serializeUser(User.serializeUser());
+// serialize users into the session all info store user into session
+passport.deserializeUser(User.deserializeUser());
+// user finsh work so deserialize the user
+
+
+app.use((req, res, next) => {
+  res.locals.success = req.flash("success");
+  res.locals.error = req.flash("error");
+  next();
+});
+
+// Define your routes after this middleware
+app.use("/listing", listingsRouter);
+app.use("/listing/:id/reviews", reviewsrouter);  //is require to create review
+app.use("/",userRouter);
+
+// Your other routes here...
+// register mate
+// app.get("/demouser", async (req, res) => {
+//   let fakeUser = new User({
+//         email: "student@gmail.com",
+//         username: "deltastudent1"
+//   });
+//   console.log("flesh")
+  
+//   let registerdUser = await User.register(fakeUser, "helloworld");
+//   res.send(registerdUser);
+// })
+
+
+// Verify that you are setting the flash messages correctly in your routes
 app.get("/listing", wrapAsync(async (req, res) => {
-      const allListings = await Listing.find({});
-      // await Listing.find({})
-      res.render("listings/index", { allListings });
+  const allListings = await Listing.find({});
+  res.render("listings/index", { allListings });
 }));
 
-
-
-
-const validateReview = ((req, res, next) => {
-      let { error } = reviewSchema.validate(req.body);
-      if (error) {
-            let errMsg = error.details.map((el) => el.message).join(",");
-            throw new ExpressError(400, errMsg);
-      } else {
-            next();
-      }
+// Example route that sets a flash message
+app.post("/someRoute", (req, res) => {
+  req.flash("success", "Successfully completed the action!");
+  res.redirect("/listing");
 });
 
-app.use("./listing",listings)
-
-
-//Reviwes post route
-app.post("/listing/:id/reviews", validateReview, wrapAsync(async (req, res) => {
-      //review model ne reuire karvu uper
-      await Listing.findByIdAndUpdate();
-      console.log(req.params.id);
-      console.log(req.body);
-      let listing = await Listing.findById(req.params.id)
-      let newReview = new Review(req.body.review);
-      //      console.log(newReview)
-      //   show.ejs ma form banauy aema review rating pass karva newReview ma store karyu
-
-      listing.reviews.push(newReview);
-      //   each listing jode review array hashe to ene push karvu newReview ander
-      await newReview.save(); //save in both t db
-      await listing.save();//beacu existing db ni document ma change karva use save function that is alo Async itself
-      res.redirect(`/listing/${listing._id}`);
-      // res.send("worked")
-
-})
-)
-// review Delete route
-// app.delete("/listing/:id/reviews/:reviewId", wrapAsync(async (req, res) => {
-//       let { id, reviewId } = req.params;
-
-
-//      await  Listing.findByIdAndUpdate(id,{$pull:{reviews: reviewId}});//areviewId ni array  inside delete the review use findByIdUpdate kari revi ni id ne delete karvi pade so use MONGOSH $PULL OPERATER
-//       await Review.findByIdAndDelete(reviewId);
-
-//       req.redirect(`/listing/${id}`);
-
-// })
-// );
-app.delete("/listing/:id/reviews/:reviewId", wrapAsync(async (req, res) => {
-      let { id, reviewId } = req.params;
-
-
-     await  Listing.findByIdAndUpdate(id,{$pull:{reviews: reviewId}}).then(res => console.log(res)).catch(err => console.log(err))
-      await Review.findByIdAndDelete(reviewId);
-
-      res.redirect(`/listing/${id}`);
-
-})
-);
-
-app.use((err, req, res, next) => {
-      const { statusCode = 500, message = "Something went wrong" } = err;
-      // console.error(err); // Log the error to the console
-      res.status(statusCode).render("listings/error.ejs", { message })
-      // res.status(statusCode).send(message);
-})
-
-app.get("/", (req, res) => {
-      res.send("Hi, i am root")
-}
-)
 // Middleware to set flash messages
 app.use((req, res, next) => {
-      res.locals.success = req.flash("success");
-      res.locals.error = req.flash("error");
-      next();
+  res.locals.success = req.flash("success");
+  res.locals.error = req.flash("error");
+  next();
 });
-
-  
-
 
 // app.get("/testListing",async(req,res)=>{
 //       let sampleListing = new Listing({
@@ -144,15 +132,15 @@ app.use((req, res, next) => {
 //       res.send("successful testing");
 // });
 
-// app.all("*", (req, res, next) => {
-//       next(new ExpressError(404, "Page Not Found"));//NOT 
-// })
+app.all("*", (req, res, next) => {
+      next(new ExpressError(404, "Page Not Found"));//NOT 
+})
 
 app.use((err, req, res, next) => { //middleare thi handle the error to price valid enter 
-      let { statusCode = 500, message = "something went wrong" } = err;//NOT 
-      res.status(statusCode).send(message);
+  let { statusCode = 500, message = "something went wrong" } = err;//NOT 
+  res.status(statusCode).send(message);
 })
 app.listen(8080, () => {
-      console.log("server working")
+  console.log("server working")
 
 })
