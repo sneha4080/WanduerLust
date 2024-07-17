@@ -20,6 +20,8 @@ const userRouter = require("./routes/user.js");
 const wrapAsync = require("./utils/wrapAsync.js");
 const Listing = require("./models/Listing.js");
 
+const listingRoutes = require('./routes/listing');
+
 const MONGO_URL = "mongodb://127.0.0.1:27017/Wanderlust";
 
 main()
@@ -55,7 +57,7 @@ const sessionOptions = {
       resave: false,
       saveUninitialized: true,
       Cookie: {
-            expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+            expires: Date.now() * 7 * 24 * 60 * 60 * 1000,
             maxAge: 7 * 24 * 60 * 60 * 1000,
             httpOnly: true
       },
@@ -116,6 +118,7 @@ app.post("/someRoute", (req, res) => {
 app.use((req, res, next) => {
   res.locals.success = req.flash("success");
   res.locals.error = req.flash("error");
+  res.locals.currUser = req.user;
   next();
 });
 
